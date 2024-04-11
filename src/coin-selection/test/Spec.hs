@@ -97,6 +97,7 @@ tests = testGroup "unit tests"
     , testCase "making payments with tokens (2)" (mockchainSucceeds $ failOnError (mintingPlutus >>= spendTokens2))
     , testCase "spending a singleton output" (mockchainSucceeds $ failOnError (mintingPlutus >>= spendSingletonOutput))
     , testCase "spend an output locked by the matching index script" (mockchainSucceeds $ failOnError matchingIndex)
+    , testCase "mint a token with the matching index minting policy" (mockchainSucceeds $ failOnError matchingIndexMP)
     ]
   , testGroup "mockchain"
     [ testCase "resolveDatumHash" (mockchainSucceeds $ failOnError checkResolveDatumHash)
@@ -351,7 +352,7 @@ largeTransactionTest = do
 
 matchingIndex :: (MonadMockchain m, MonadError BalanceTxError m) => m ()
 matchingIndex = do
-  let txBody = execBuildTx' (payToPlutusV2 Defaults.networkId Scripts.matchingIndexScript () C.NoStakeAddress (C.lovelaceToValue 10_000_000))
+  let txBody = execBuildTx' (payToPlutusV2 Defaults.networkId Scripts.matchingIndexValidatorScript () C.NoStakeAddress (C.lovelaceToValue 10_000_000))
       tx     = C.TxIn <$> (C.getTxId . C.getTxBody <$> balanceAndSubmit mempty Wallet.w1 txBody) <*> pure (C.TxIx 0)
 
   -- create three separate tx outputs that are locked by the matching index script
@@ -377,3 +378,10 @@ withdrawZero = do
   singleUTxO txI >>= \case
     Nothing -> fail "txI not found"
     Just{} -> pure ()
+
+matchingIndexMP ::  (MonadMockchain m, MonadError BalanceTxError m) => m ()
+matchingIndexMP = do
+  let sh = C.hashScript (C.PlutusScript C.PlutusScriptV2 Scripts.matchingIndexMPScript)
+      policyId = C.PolicyId sh
+      runTx assetName = Scripts.mintMatchingIndex policyId assetName 100
+  void $ balanceAndSubmit mempty Wallet.w1 $ execBuildTx' $ traverse_ runTx ["assetName1", "assetName2", "assetName3"]
